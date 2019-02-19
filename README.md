@@ -1,0 +1,1 @@
+# MoveIt! config of the Sawyer Robot with ClickSmart Pneumatic Gripper
