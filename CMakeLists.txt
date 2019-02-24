@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   moveit_ros_planning_interface
   moveit_visual_tools
+  intera_core_msgs
 )
 
 find_package(Eigen3 REQUIRED)
