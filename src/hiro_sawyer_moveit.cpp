@@ -1,49 +1,44 @@
-#include <ros/ros.h>
-
-#include <sensor_msgs/JointState.h>
-
-#include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <moveit_msgs/DisplayRobotState.h>
-#include <moveit_msgs/DisplayTrajectory.h>
-#include <moveit_msgs/AttachedCollisionObject.h>
-#include <moveit_msgs/CollisionObject.h>
-#include <moveit_msgs/RobotTrajectory.h>
-#include <moveit_visual_tools/moveit_visual_tools.h>
-
-#include <intera_core_msgs/IODeviceStatus.h>
-#include <intera_core_msgs/IONodeStatus.h>
-#include <intera_core_msgs/IONodeConfiguration.h>
-#include <intera_core_msgs/IODeviceConfiguration.h>
-#include <intera_core_msgs/IOComponentCommand.h>
-#include <intera_core_msgs/IOStatus.h>
-#include <intera_core_msgs/JointCommand.h>
+#include <hiro_sawyer_moveit/hiro_sawyer_moveit.h>
 
 #include <string>
 #include <cstdlib>
 #include <algorithm>
 
 using namespace intera_core_msgs;
+using namespace std;
+using namespace KDL;
 
-std::shared_ptr<ros::NodeHandle> n;
+HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNING_GROUP(group), ee_name(""), move_group(group)
+{
+    sub_move_target = n.subscribe("/hiro/sawyer/target", 1, &HiroSawyer::targetCb, this);
+    sub_end_effector_state = n.subscribe("/io/end_effector/state", 3, &HiroSawyer::gripperInitCb, this);
+    sub_joints_state = n.subscribe("/robot/joint_states", 1, &HiroSawyer::stateCb, this);
+    pub_end_effector_cmd = n.advertise<IOComponentCommand>("/io/end_effector/command", 10);
+    pub_torque_cmd = n.advertise<JointCommand>("/robot/limb/right/joint_command", 1);
 
-static const std::string PLANNING_GROUP = "right_arm";
-std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
+    cur_pos = vector<double>(7);
+    cur_vel = vector<double>(7);
+    Kp = vector<double>(7);
+    Kd = vector<double>(7);
+    effort_limit = vector<double> {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
 
-ros::Publisher pub_end_effector_cmd;
-ros::Publisher pub_cmd;
-ros::Publisher pub_torque_cmd;
-ros::Subscriber sub_end_effector_state;
-ros::Subscriber sub_joints_state;
-std::string ee_name;
+    spinner.start();
 
-std::vector<double> cur_pos(7);
-std::vector<double> cur_vel(7);
-std::vector<double> Kp(7);
-std::vector<double> Kd(7);
-std::vector<double> effort_limit {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
+    move_group.setPlannerId("RRTConnect");
 
-void setK(std::vector<double>& k, double k0, double k1, double k2, double k3, double k4, double k5, double k6)
+    ROS_INFO("Reference frame: %s", move_group.getPlanningFrame().c_str());
+    ROS_INFO("End effector link: %s", move_group.getEndEffectorLink().c_str());
+
+    setK(Kp, 500, 500, 300, 300, 20, 100, 100);
+    setK(Kd, 1, 1, 1, 1, 0.5, 0.5, 0.5);
+}
+
+HiroSawyer::~HiroSawyer()
+{
+    spinner.stop();
+}
+
+void HiroSawyer::setK(vector<double>& k, double k0, double k1, double k2, double k3, double k4, double k5, double k6)
 {
     if (k.size() != 7)
     {
@@ -59,9 +54,9 @@ void setK(std::vector<double>& k, double k0, double k1, double k2, double k3, do
     k[6] = k6;
 }
 
-bool wait(ros::Duration _timeout)
+bool HiroSawyer::wait(ros::Duration _timeout)
 {
-    ros::Rate r(100);
+    ros::Rate r(200);
     ros::Time start = ros::Time::now();
 
     while(ros::ok())
@@ -75,7 +70,7 @@ bool wait(ros::Duration _timeout)
     return false;
 }
 
-bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args)
+bool HiroSawyer::sendGripperCommand(string _cmd, bool _block, double _timeout, string _args)
 {
     IOComponentCommand ee_cmd;
     ee_cmd.time = ros::Time::now();
@@ -97,25 +92,25 @@ bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::str
     return true;
 }
 
-bool open(bool _block, double _timeout)
+bool HiroSawyer::open(bool _block, double _timeout)
 {
     std::string arg = "{\"signals\": {\"grip_BJech7Hky4\": {\"data\": [true], \"format\": {\"type\": \"bool\"}}}}";
     return sendGripperCommand("set", _block, _timeout, arg);
 }
 
-bool close(bool _block, double _timeout)
+bool HiroSawyer::close(bool _block, double _timeout)
 {
     std::string arg = "{\"signals\": {\"grip_BJech7Hky4\": {\"data\": [false], \"format\": {\"type\": \"bool\"}}}}";
     return sendGripperCommand("set", _block, _timeout, arg);
 }
 
-bool stop(bool _block, double _timeout)
+bool HiroSawyer::stop(bool _block, double _timeout)
 {
     std::string arg = "{\"signals\": {\"go\": {\"data\": [false], \"format\": {\"type\": \"bool\"}}}}";
     return sendGripperCommand("set", _block, _timeout, arg);
 }
 
-void initialize(double _timeout)
+void HiroSawyer::initialize(double _timeout)
 {
     IOComponentCommand cmd;
     cmd.time = ros::Time::now();
@@ -125,7 +120,7 @@ void initialize(double _timeout)
     ros::Duration(0.5).sleep();
 }
 
-void gripperInitCb(const IONodeStatus &msg)
+void HiroSawyer::gripperInitCb(const IONodeStatus& msg)
 {
     if (ee_name == "")
     {
@@ -135,7 +130,7 @@ void gripperInitCb(const IONodeStatus &msg)
             {
                 ee_name = msg.devices[0].name;
                 ROS_INFO("Received EE Name: %s", ee_name.c_str());
-                pub_cmd = n->advertise<IOComponentCommand>( "/io/end_effector/" + ee_name + "/command", 10);
+                pub_cmd = n.advertise<IOComponentCommand>( "/io/end_effector/" + ee_name + "/command", 10);
             }
             if (msg.devices[0].status.tag == "down" || msg.devices[0].status.tag == "unready")
             {
@@ -147,7 +142,7 @@ void gripperInitCb(const IONodeStatus &msg)
     }
 }
 
-void stateCb(const sensor_msgs::JointState& msg)
+void HiroSawyer::stateCb(const sensor_msgs::JointState& msg)
 {
     for (int i = 0; i < 7; i++)
     {
@@ -156,11 +151,10 @@ void stateCb(const sensor_msgs::JointState& msg)
     }
 }
 
-bool reached(std::vector<double>& target)
+bool HiroSawyer::reached(vector<double>& target)
 {
     for (int i = 0; i < 7; i++)
     {
-        std::cout << std::abs(target[i] - cur_pos[i]) << std::endl;
         if (std::abs(target[i] - cur_pos[i]) > 0.1)
         {
             return false;
@@ -169,7 +163,7 @@ bool reached(std::vector<double>& target)
     return true;
 }
 
-double norm(std::vector<double>& a, std::vector<double>& b)
+double HiroSawyer::norm(vector<double>& a, vector<double>& b)
 {
     if (a.size() != b.size() || a.size() == 0)
     {
@@ -183,7 +177,7 @@ double norm(std::vector<double>& a, std::vector<double>& b)
     return sqrt(res);
 }
 
-void move(moveit_msgs::RobotTrajectory& traj)
+void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
 {
     if (traj.joint_trajectory.points.size() <= 0)
     {
@@ -199,7 +193,7 @@ void move(moveit_msgs::RobotTrajectory& traj)
     {
         applied_pos[i] = cur_pos[i];
     }
-    ros::Rate loop_rate(600);
+    ros::Rate loop_rate(250);
     ros::Time start = ros::Time::now();
     int size = traj.joint_trajectory.points.size();
     for (int p = 0; ros::ok() && p < size; p++)
@@ -237,65 +231,26 @@ void move(moveit_msgs::RobotTrajectory& traj)
     }
 }
 
-void targetCb(const geometry_msgs::Pose& msg)
+void HiroSawyer::gotoPose(geometry_msgs::Pose& target)
 {
-    move_group->setPoseTarget(msg);
+    move_group.setPoseTarget(target);
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    bool success = (move_group->plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
+    move_group.move();
+}
+
+void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
+{
+    move_group.setPoseTarget(msg);
+    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+    bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
     std::cout << my_plan.trajectory_.joint_trajectory.points.size() << std::endl;
 
     move(my_plan.trajectory_);
-    // move_group->move();
+    // move_group.move();
     // close(true, 1.5);
     // open(true, 1.5);
-}
-
-
-int main(int argc, char** argv)
-{
-    ros::init(argc, argv, "hiro_move_group_interface");
-    n = std::make_shared<ros::NodeHandle>();
-    ee_name = "";
-
-    ros::Subscriber sub_move_target = n->subscribe("/hiro/sawyer/target", 1, targetCb);
-    sub_end_effector_state = n->subscribe("/io/end_effector/state", 3, gripperInitCb);
-    pub_end_effector_cmd = n->advertise<IOComponentCommand>("/io/end_effector/command", 10);
-    pub_torque_cmd = n->advertise<intera_core_msgs::JointCommand>("/robot/limb/right/joint_command", 1);
-    sub_joints_state = n->subscribe("/robot/joint_states", 1, stateCb);
-
-    ros::AsyncSpinner spinner(8);
-    spinner.start();
-
-    move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(PLANNING_GROUP);
-    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-    move_group->setPlannerId("RRTConnect");
-
-    ROS_INFO("Reference frame: %s", move_group->getPlanningFrame().c_str());
-    ROS_INFO("End effector link: %s", move_group->getEndEffectorLink().c_str());
-
-    geometry_msgs::Pose init_pose;
-    init_pose.orientation.x = 0.0;
-    init_pose.orientation.y = 1.0;
-    init_pose.orientation.z = 0.0;
-    init_pose.orientation.w = 0.0;
-    init_pose.position.x = 0.45;
-    init_pose.position.y = 0.45;
-    init_pose.position.z = 0.3;
-    move_group->setPoseTarget(init_pose);
-
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    bool success = (move_group->plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-    ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
-    move_group->move();
-
-    //std::vector<double> effort_limit {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
-
-    setK(Kp, 500, 500, 300, 300, 20, 100, 100);
-    setK(Kd, 1, 1, 1, 1, 0.5, 0.5, 0.5);
-
-    ros::waitForShutdown();
-
-    return 0;
 }

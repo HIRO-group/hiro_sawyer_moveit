@@ -25,8 +25,14 @@ include_directories(
          ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(hiro_sawyer_moveit src/hiro_sawyer_moveit.cpp)
+add_library(hiro_sawyer_moveit include/hiro_sawyer_moveit/hiro_sawyer_moveit.h
+                               src/hiro_sawyer_moveit.cpp)
+add_dependencies(hiro_sawyer_moveit        ${catkin_EXPORTED_TARGETS})
 target_link_libraries(hiro_sawyer_moveit ${catkin_LIBRARIES})
+
+add_executable(hiro_sawyer_DSM src/hiro_sawyer_DSM.cpp)
+target_link_libraries(hiro_sawyer_DSM hiro_sawyer_moveit
+                                      ${catkin_LIBRARIES})
 
 install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   PATTERN "setup_assistant.launch" EXCLUDE)
