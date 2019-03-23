@@ -19,6 +19,8 @@
 #include <intera_core_msgs/IOStatus.h>
 #include <intera_core_msgs/JointCommand.h>
 
+#include <kdl_parser/kdl_parser.hpp>
+#include <kdl/jntspaceinertiamatrix.hpp>
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chain.hpp>
 
@@ -46,6 +48,15 @@ private:
     std::vector<double> Kp;
     std::vector<double> Kd;
     std::vector<double> effort_limit;
+
+    KDL::Tree kdl_tree;
+    KDL::Chain kdl_chain;
+    KDL::JntArray kdl_cur_pos;
+    KDL::JntArray kdl_cur_vel;
+    KDL::JntArray coriolis;
+    KDL::JntSpaceInertiaMatrix mass;
+    std::shared_ptr<KDL::ChainDynParam> dyn_param;
+    unsigned int joint_num;
 public:
     HiroSawyer(std::string name, std::string group = "right_arm");
     ~HiroSawyer();

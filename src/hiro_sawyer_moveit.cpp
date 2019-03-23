@@ -1,4 +1,5 @@
 #include <hiro_sawyer_moveit/hiro_sawyer_moveit.h>
+#include <ros/package.h>
 
 #include <string>
 #include <cstdlib>
@@ -16,11 +17,33 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     pub_end_effector_cmd = n.advertise<IOComponentCommand>("/io/end_effector/command", 10);
     pub_torque_cmd = n.advertise<JointCommand>("/robot/limb/right/joint_command", 1);
 
-    cur_pos = vector<double>(7);
-    cur_vel = vector<double>(7);
-    Kp = vector<double>(7);
-    Kd = vector<double>(7);
     effort_limit = vector<double> {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
+
+    // create KDL chain
+    string path = ros::package::getPath("hiro_sawyer_moveit");
+    ROS_INFO("%s", path.c_str());
+    string robot_desc_string;
+    if (!kdl_parser::treeFromFile(path + "/urdf/sawyer.urdf", kdl_tree))
+    {
+        ROS_ERROR("Failed to construct kdl tree");
+    }
+    if (!kdl_tree.getChain("base", move_group.getEndEffectorLink(), kdl_chain))
+    {
+        ROS_ERROR("Failed to get kdl chain");
+    }
+    ROS_INFO("Successfully get KDL Chain with %d joints", kdl_chain.getNrOfJoints());
+    joint_num = kdl_chain.getNrOfJoints();
+    kdl_cur_pos.resize(joint_num);
+    kdl_cur_vel.resize(joint_num);
+    coriolis.resize(joint_num);
+    mass.resize(joint_num);
+    KDL::Vector gravity(0.0, 0.0, -9.80);
+    dyn_param = make_shared<ChainDynParam>(kdl_chain, gravity);
+
+    cur_pos = vector<double>(joint_num);
+    cur_vel = vector<double>(joint_num);
+    Kp = vector<double>(joint_num);
+    Kd = vector<double>(joint_num);
 
     spinner.start();
 
@@ -40,7 +63,7 @@ HiroSawyer::~HiroSawyer()
 
 void HiroSawyer::setK(vector<double>& k, double k0, double k1, double k2, double k3, double k4, double k5, double k6)
 {
-    if (k.size() != 7)
+    if (k.size() != joint_num)
     {
         ROS_ERROR("setK Size Mismatch!");
         return;
@@ -144,16 +167,23 @@ void HiroSawyer::gripperInitCb(const IONodeStatus& msg)
 
 void HiroSawyer::stateCb(const sensor_msgs::JointState& msg)
 {
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < joint_num; i++)
     {
         cur_pos[i] = msg.position[i+1];   // i=0: state head_pan
+        kdl_cur_pos(i) = msg.position[i+1];
         cur_vel[i] = msg.velocity[i+1];   // i=0: state head_pan
+        kdl_cur_vel(i) = msg.position[i+1];
     }
 }
 
 bool HiroSawyer::reached(vector<double>& target)
 {
-    for (int i = 0; i < 7; i++)
+    if (target.size() != joint_num)
+    {
+        ROS_ERROR("reached size mismatched");
+        return false;
+    }
+    for (int i = 0; i < joint_num; i++)
     {
         if (std::abs(target[i] - cur_pos[i]) > 0.1)
         {
@@ -184,12 +214,12 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         ROS_ERROR("Invalid trajectory");
         return;
     }
-    std::vector<double> tau(7, 0);
-    std::vector<double> applied_pos(7, 0);
-    std::vector<double> rho(7);
+    std::vector<double> tau(joint_num, 0);
+    std::vector<double> applied_pos(joint_num, 0);
+    std::vector<double> rho(joint_num);
     double delta = 1;
     // init applied pos
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < joint_num; i++)
     {
         applied_pos[i] = cur_pos[i];
     }
@@ -201,8 +231,10 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
         while (ros::ok() && !reached(target))
         {
+            dyn_param->JntToMass(kdl_cur_pos, mass);
+            dyn_param->JntToCoriolis(kdl_cur_pos, kdl_cur_vel, coriolis);
             double denominator = std::max(norm(target, applied_pos), 0.01);
-            for(int i = 0; i < 7; i++)
+            for(int i = 0; i < joint_num; i++)
             {
                 rho[i] = (target[i] - applied_pos[i])/denominator;
                 applied_pos[i] = applied_pos[i] + delta*rho[i]*(ros::Time::now() - start).toSec();
@@ -210,7 +242,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
             }
             intera_core_msgs::JointCommand msg;
             msg.mode = 3; // TORQUE_MODE
-            for (int i = 0; i < 7; i++)
+            for (int i = 0; i < joint_num; i++)
             {
                 msg.names.push_back("right_j" + std::to_string(i));
                 if (std::abs(tau[i]) >= 0.9*effort_limit[i])
@@ -222,7 +254,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
                 {
                     msg.effort.push_back(tau[i]);
                 }
-                std::cout << msg.names[i] << ": " << msg.effort[i] << std::endl;
+                // std::cout << msg.names[i] << ": " << msg.effort[i] << std::endl;
             }
             pub_torque_cmd.publish(msg);
             start = ros::Time::now();
