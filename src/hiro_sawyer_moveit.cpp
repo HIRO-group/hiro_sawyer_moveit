@@ -23,7 +23,6 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
-    ROS_INFO("%s", path.c_str());
     string robot_desc_string;
     if (!kdl_parser::treeFromFile(path + "/urdf/sawyer.urdf", kdl_tree))
     {
@@ -191,6 +190,18 @@ double HiroSawyer::norm(vector<double>& a, vector<double>& b)
     return sqrt(res);
 }
 
+void HiroSawyer::updateInverseMass()
+{
+    for (int i = 0; i < joint_num; i++)
+    {
+        for (int j = 0; j < joint_num; j++)
+        {
+            mass_matrix(i, j) = kdl_mass(i, j);
+        }
+    }
+    mass_matrix = mass_matrix.inverse();
+}
+
 void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
 {
     if (traj.joint_trajectory.points.size() <= 0)
@@ -217,6 +228,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         {
             dyn_param->JntToMass(kdl_cur_pos, kdl_mass);
             dyn_param->JntToCoriolis(kdl_cur_pos, kdl_cur_vel, kdl_coriolis);
+            updateInverseMass();
             double denominator = std::max(norm(target, applied_pos), 0.01);
             for(int i = 0; i < joint_num; i++)
             {
@@ -254,10 +266,6 @@ void HiroSawyer::gotoPose(geometry_msgs::Pose& target)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
     move_group.move();
-
-    // test gripper
-    // close(true, 2);
-    // open(true, 2);
 }
 
 void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
@@ -270,4 +278,8 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     std::cout << my_plan.trajectory_.joint_trajectory.points.size() << std::endl;
 
     move(my_plan.trajectory_);
+    
+    // test gripper
+    // close(true, 2);
+    // open(true, 2);
 }

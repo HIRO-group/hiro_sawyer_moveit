@@ -76,6 +76,7 @@ public:
     // utilities
     bool reached(std::vector<double>& target);
     double norm(std::vector<double>& a, std::vector<double>& b);
+    void updateInverseMass(void);
     void move(moveit_msgs::RobotTrajectory& traj);
     void gotoPose(geometry_msgs::Pose& target);
     // callbacks
