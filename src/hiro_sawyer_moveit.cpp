@@ -18,6 +18,8 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     pub_torque_cmd = n.advertise<JointCommand>("/robot/limb/right/joint_command", 1);
 
     effort_limit = vector<double> {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
+    Kp = vector<double> {500, 500, 300, 300, 20, 100, 100};
+    Kd = vector<double> {1, 1, 1, 1, 0.5, 0.5, 0.5};
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
@@ -42,8 +44,6 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
 
     cur_pos = vector<double>(joint_num);
     cur_vel = vector<double>(joint_num);
-    Kp = vector<double>(joint_num);
-    Kd = vector<double>(joint_num);
 
     spinner.start();
 
@@ -51,30 +51,11 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
 
     ROS_INFO("Reference frame: %s", move_group.getPlanningFrame().c_str());
     ROS_INFO("End effector link: %s", move_group.getEndEffectorLink().c_str());
-
-    setK(Kp, 500, 500, 300, 300, 20, 100, 100);
-    setK(Kd, 1, 1, 1, 1, 0.5, 0.5, 0.5);
 }
 
 HiroSawyer::~HiroSawyer()
 {
     spinner.stop();
-}
-
-void HiroSawyer::setK(vector<double>& k, double k0, double k1, double k2, double k3, double k4, double k5, double k6)
-{
-    if (k.size() != joint_num)
-    {
-        ROS_ERROR("setK Size Mismatch!");
-        return;
-    }
-    k[0] = k0;
-    k[1] = k1;
-    k[2] = k2;
-    k[3] = k3;
-    k[4] = k4;
-    k[5] = k5;
-    k[6] = k6;
 }
 
 bool HiroSawyer::wait(ros::Duration _timeout)

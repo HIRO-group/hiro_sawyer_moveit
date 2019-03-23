@@ -61,7 +61,6 @@ public:
     HiroSawyer(std::string name, std::string group = "right_arm");
     ~HiroSawyer();
 
-    void setK(std::vector<double>& k, double k0, double k1, double k2, double k3, double k4, double k5, double k6);
     bool wait(ros::Duration _timeout);
     bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
     // gripper functions
