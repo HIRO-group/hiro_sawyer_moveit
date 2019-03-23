@@ -156,7 +156,7 @@ void HiroSawyer::stateCb(const sensor_msgs::JointState& msg)
         cur_pos[i] = msg.position[i+1];   // i=0: state head_pan
         kdl_cur_pos(i) = msg.position[i+1];
         cur_vel[i] = msg.velocity[i+1];   // i=0: state head_pan
-        kdl_cur_vel(i) = msg.position[i+1];
+        kdl_cur_vel(i) = msg.velocity[i+1];
     }
 }
 
@@ -179,7 +179,7 @@ bool HiroSawyer::reached(vector<double>& target)
 
 double HiroSawyer::norm(vector<double>& a, vector<double>& b)
 {
-    if (a.size() != b.size() || a.size() == 0)
+    if ((a.size() != b.size()) || (a.size() == 0 || b.size() == 0))
     {
         return -1;
     }
