@@ -37,10 +37,13 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     joint_num = kdl_chain.getNrOfJoints();
     kdl_cur_pos.resize(joint_num);
     kdl_cur_vel.resize(joint_num);
-    coriolis.resize(joint_num);
-    mass.resize(joint_num);
+    kdl_coriolis.resize(joint_num);
+    kdl_mass.resize(joint_num);
     KDL::Vector gravity(0.0, 0.0, -9.80);
     dyn_param = make_shared<ChainDynParam>(kdl_chain, gravity);
+
+    coriolis_vector.resize(joint_num);
+    mass_matrix.resize(joint_num, joint_num);
 
     cur_pos = vector<double>(joint_num);
     cur_vel = vector<double>(joint_num);
@@ -212,8 +215,8 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
         while (ros::ok() && !reached(target))
         {
-            dyn_param->JntToMass(kdl_cur_pos, mass);
-            dyn_param->JntToCoriolis(kdl_cur_pos, kdl_cur_vel, coriolis);
+            dyn_param->JntToMass(kdl_cur_pos, kdl_mass);
+            dyn_param->JntToCoriolis(kdl_cur_pos, kdl_cur_vel, kdl_coriolis);
             double denominator = std::max(norm(target, applied_pos), 0.01);
             for(int i = 0; i < joint_num; i++)
             {
@@ -251,6 +254,10 @@ void HiroSawyer::gotoPose(geometry_msgs::Pose& target)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
     move_group.move();
+
+    // test gripper
+    // close(true, 2);
+    // open(true, 2);
 }
 
 void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
@@ -263,7 +270,4 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     std::cout << my_plan.trajectory_.joint_trajectory.points.size() << std::endl;
 
     move(my_plan.trajectory_);
-    // move_group.move();
-    // close(true, 1.5);
-    // open(true, 1.5);
 }

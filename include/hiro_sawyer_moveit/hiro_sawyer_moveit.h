@@ -24,6 +24,8 @@
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chain.hpp>
 
+#include <eigen3/Eigen/Dense>
+
 class HiroSawyer
 {
 private:
@@ -53,10 +55,13 @@ private:
     KDL::Chain kdl_chain;
     KDL::JntArray kdl_cur_pos;
     KDL::JntArray kdl_cur_vel;
-    KDL::JntArray coriolis;
-    KDL::JntSpaceInertiaMatrix mass;
+    KDL::JntArray kdl_coriolis;
+    KDL::JntSpaceInertiaMatrix kdl_mass;
     std::shared_ptr<KDL::ChainDynParam> dyn_param;
     unsigned int joint_num;
+
+    Eigen::VectorXd coriolis_vector;
+    Eigen::MatrixXd mass_matrix;
 public:
     HiroSawyer(std::string name, std::string group = "right_arm");
     ~HiroSawyer();
