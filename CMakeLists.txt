@@ -28,6 +28,16 @@ include_directories(
 add_executable(hiro_sawyer_moveit src/hiro_sawyer_moveit.cpp)
 target_link_libraries(hiro_sawyer_moveit ${catkin_LIBRARIES})
 
+add_executable(sawyer_control_qd_posinput src/sawyer_control_qd_posinput.cpp)
+target_link_libraries(sawyer_control_qd_posinput ${catkin_LIBRARIES})
+
+add_executable(sawyer_control_qd_tauinput src/sawyer_control_qd_tauinput.cpp)
+target_link_libraries(sawyer_control_qd_tauinput ${catkin_LIBRARIES})
+
+add_executable(sawyer_control_ERG_v2 src/sawyer_control_ERG_v2.cpp)
+target_link_libraries(sawyer_control_ERG_v2 ${catkin_LIBRARIES})
+
+
 install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   PATTERN "setup_assistant.launch" EXCLUDE)
 install(DIRECTORY config DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
