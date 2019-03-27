@@ -86,6 +86,6 @@
   </node>
 
   <!--<node name="rviz" pkg="rviz" type="rviz" />-->
-  <node name="sayter_moveit_interface" pkg="hiro_sawyer_moveit" type="hiro_sawyer_moveit" output="screen" />
+  <node name="sayter_moveit_interface" pkg="hiro_sawyer_moveit" type="hiro_sawyer_DSM" output="screen" />
 
 </launch>
