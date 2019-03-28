@@ -50,37 +50,43 @@ private:
     std::vector<double> Kp;
     std::vector<double> Kd;
     std::vector<double> effort_limit;
+    std::vector<double> effort_limit_lower;
+    std::vector<double> position_upper;
+    std::vector<double> position_lower;
 
     KDL::Tree kdl_tree;
     KDL::Chain kdl_chain;
     KDL::JntArray kdl_cur_pos;
     KDL::JntArray kdl_cur_vel;
     KDL::JntArray kdl_coriolis;
+    KDL::JntArray kdl_gravity;
     KDL::JntSpaceInertiaMatrix kdl_mass;
     std::shared_ptr<KDL::ChainDynParam> dyn_param;
     unsigned int joint_num;
 
-    Eigen::VectorXd coriolis_vector;
     Eigen::MatrixXd mass_matrix;
-public:
-    HiroSawyer(std::string name, std::string group = "right_arm");
-    ~HiroSawyer();
 
-    bool wait(ros::Duration _timeout);
-    bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
-    // gripper functions
-    bool open(bool _block, double _timeout);
-    bool close(bool _block, double _timeout);
-    bool stop(bool _block, double _timeout);
     void initialize(double _timeout);
-    // utilities
     bool reached(std::vector<double>& target);
     double norm(std::vector<double>& a, std::vector<double>& b);
-    void updateInverseMass(void);
-    void move(moveit_msgs::RobotTrajectory& traj);
-    void gotoPose(geometry_msgs::Pose& target);
+    void updateMass(void);
+    bool wait(ros::Duration _timeout);
+    bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
+    void updateKDLVectors(std::vector<double>& pos, std::vector<double>& vel);
+    double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.01, double delta_tau = 0.05, double kappa_tau = 0.1, double delta_q = 0.05, double kappa_q = 1);
     // callbacks
     void targetCb(const geometry_msgs::Pose& msg);
     void gripperInitCb(const intera_core_msgs::IONodeStatus& msg);
     void stateCb(const sensor_msgs::JointState& msg);
+public:
+    HiroSawyer(std::string name, std::string group = "right_arm");
+    ~HiroSawyer();
+
+    // gripper functions
+    bool open(bool _block, double _timeout);
+    bool close(bool _block, double _timeout);
+    bool stop(bool _block, double _timeout);
+    // movement
+    void move(moveit_msgs::RobotTrajectory& traj);
+    void gotoPose(geometry_msgs::Pose& target);
 };
