@@ -42,10 +42,16 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     kdl_coriolis.resize(joint_num);
     kdl_gravity.resize(joint_num);
     kdl_mass.resize(joint_num);
+    tau_pred.resize(joint_num);
+    tau.resize(joint_num);
+    applied_pos.resize(joint_num);
+    rho.resize(joint_num);
     KDL::Vector gravity(0.0, 0.0, -9.81);
     dyn_param = make_shared<ChainDynParam>(kdl_chain, gravity);
 
-    mass_matrix.resize(joint_num, joint_num);
+    mass_matrix = arma::zeros<arma::mat>(joint_num, joint_num);
+    part = arma::zeros<arma::vec>(joint_num);
+    q_ddot = arma::zeros<arma::vec>(joint_num);
 
     cur_pos = vector<double>(joint_num);
     cur_vel = vector<double>(joint_num);
@@ -213,19 +219,13 @@ void HiroSawyer::updateKDLVectors(std::vector<double>& pos, std::vector<double>&
 
 double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sampling_time, double delta_tau, double kappa_tau, double delta_q, double kappa_q)
 {
-    Eigen::VectorXd q_ddot(joint_num, 1);
-    std::vector<double> tau(joint_num);
-    std::vector<double> q_prev;
-    std::vector<double> q_curr;
-    std::vector<double> q_dot_prev;
-    std::vector<double> q_dot_curr;
     std::vector<double> tau_max = effort_limit_lower;
     std::vector<double> tau_min = effort_limit;
     std::vector<double> q_max = position_lower;
     std::vector<double> q_min = position_upper;
     q_curr = cur_pos;
     q_dot_curr = cur_vel;
-    for (int i = 0; i < sim_times; i++)
+    for (int i = 0; ros::ok() && i < sim_times; i++)
     {
         updateKDLVectors(q_curr, q_dot_curr);
         dyn_param->JntToMass(kdl_cur_pos, kdl_mass);
@@ -234,9 +234,9 @@ double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sa
         updateMass();
         for (int j = 0; j < joint_num; j++)
         {
-            q_ddot(j) = Kp[j]*(t[j] - q_curr[j]) - Kd[j]*(q_dot_curr[j]) - kdl_coriolis(j);
+            part(j) = Kp[j]*(t[j] - q_curr[j]) - Kd[j]*(q_dot_curr[j]) - kdl_coriolis(j);
         }
-        q_ddot = mass_matrix.inverse()*q_ddot;
+        q_ddot = arma::solve(mass_matrix, part);
         q_prev = q_curr;
         q_dot_prev = q_dot_curr;
         for (int j = 0; j < joint_num; j++)
@@ -251,14 +251,14 @@ double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sa
             {
                 q_min[j] = q_curr[j];
             }
-            tau[j] = Kp[j]*(t[j] - q_curr[j]) - Kd[j]*q_dot_curr[j] + kdl_gravity(j);
-            if (tau[j] > tau_max[j])
+            tau_pred[j] = Kp[j]*(t[j] - q_curr[j]) - Kd[j]*q_dot_curr[j] + kdl_gravity(j);
+            if (tau_pred[j] > tau_max[j])
             {
-                tau_max[j] = tau[j];
+                tau_max[j] = tau_pred[j];
             }
-            if (tau[j] < tau_min[j])
+            if (tau_pred[j] < tau_min[j])
             {
-                tau_min[j] = tau[j];
+                tau_min[j] = tau_pred[j];
             }
         }
     }
@@ -267,7 +267,7 @@ double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sa
     double _q_max_diff = (1 - delta_q)*position_upper[0] - q_max[0];
     double _q_min_diff = q_min[0] - (1 - delta_q)*position_lower[0];
     double tmp_diff = 0;
-    for (int i = 1; i < joint_num; i++)
+    for (int i = 1; ros::ok() && i < joint_num; i++)
     {
         tmp_diff = (1 - delta_tau)*effort_limit[i] - tau_max[i];
         if (tmp_diff < _tau_max_diff)
@@ -303,9 +303,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         ROS_ERROR("Invalid trajectory");
         return;
     }
-    std::vector<double> tau(joint_num, 0);
-    std::vector<double> applied_pos(joint_num, 0);
-    std::vector<double> rho(joint_num);
+    
     // init applied pos
     for (int i = 0; i < joint_num; i++)
     {
@@ -323,7 +321,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
             for(int i = 0; i < joint_num; i++)
             {
                 rho[i] = (target[i] - applied_pos[i])/denominator;
-                applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 100)*rho[i]*(ros::Time::now() - start).toSec();
+                applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 500)*rho[i]*(ros::Time::now() - start).toSec();
                 tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i];
             }
             intera_core_msgs::JointCommand msg;
@@ -344,7 +342,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
             }
             pub_torque_cmd.publish(msg);
             start = ros::Time::now();
-            loop_rate.sleep();
+            // loop_rate.sleep();
         }
     }
 }
@@ -364,8 +362,6 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
-
-    std::cout << my_plan.trajectory_.joint_trajectory.points.size() << std::endl;
 
     move(my_plan.trajectory_);
     

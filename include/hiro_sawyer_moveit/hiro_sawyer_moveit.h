@@ -19,12 +19,12 @@
 #include <intera_core_msgs/IOStatus.h>
 #include <intera_core_msgs/JointCommand.h>
 
+#include <armadillo/armadillo>
+
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/jntspaceinertiamatrix.hpp>
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chain.hpp>
-
-#include <eigen3/Eigen/Dense>
 
 class HiroSawyer
 {
@@ -54,6 +54,20 @@ private:
     std::vector<double> position_upper;
     std::vector<double> position_lower;
 
+    std::vector<double> tau_pred;
+    std::vector<double> q_prev;
+    std::vector<double> q_curr;
+    std::vector<double> q_dot_prev;
+    std::vector<double> q_dot_curr;
+
+    std::vector<double> tau;
+    std::vector<double> applied_pos;
+    std::vector<double> rho;
+
+    arma::vec q_ddot;
+    arma::mat mass_matrix;
+    arma::vec part;
+
     KDL::Tree kdl_tree;
     KDL::Chain kdl_chain;
     KDL::JntArray kdl_cur_pos;
@@ -64,8 +78,6 @@ private:
     std::shared_ptr<KDL::ChainDynParam> dyn_param;
     unsigned int joint_num;
 
-    Eigen::MatrixXd mass_matrix;
-
     void initialize(double _timeout);
     bool reached(std::vector<double>& target);
     double norm(std::vector<double>& a, std::vector<double>& b);
@@ -73,7 +85,7 @@ private:
     bool wait(ros::Duration _timeout);
     bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
     void updateKDLVectors(std::vector<double>& pos, std::vector<double>& vel);
-    double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.01, double delta_tau = 0.05, double kappa_tau = 0.1, double delta_q = 0.05, double kappa_q = 1);
+    double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.001, double delta_tau = 0.05, double kappa_tau = 0.1, double delta_q = 0.05, double kappa_q = 1);
     // callbacks
     void targetCb(const geometry_msgs::Pose& msg);
     void gripperInitCb(const intera_core_msgs::IONodeStatus& msg);

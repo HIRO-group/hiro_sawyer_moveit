@@ -12,8 +12,6 @@ find_package(catkin REQUIRED COMPONENTS
   intera_core_msgs
 )
 
-find_package(Eigen3 REQUIRED)
-
 catkin_package()
 
 include_directories(
@@ -21,14 +19,13 @@ include_directories(
 )
 
 include_directories(
-  SYSTEM ${Eigen_INCLUDE_DIRS}
-         ${catkin_INCLUDE_DIRS}
+  SYSTEM ${catkin_INCLUDE_DIRS}
 )
 
 add_library(hiro_sawyer_moveit include/hiro_sawyer_moveit/hiro_sawyer_moveit.h
                                src/hiro_sawyer_moveit.cpp)
 add_dependencies(hiro_sawyer_moveit        ${catkin_EXPORTED_TARGETS})
-target_link_libraries(hiro_sawyer_moveit ${catkin_LIBRARIES})
+target_link_libraries(hiro_sawyer_moveit ${catkin_LIBRARIES} armadillo lapack blas)
 
 add_executable(sawyer_control_qd_posinput src/sawyer_control_qd_posinput.cpp)
 target_link_libraries(sawyer_control_qd_posinput ${catkin_LIBRARIES})
