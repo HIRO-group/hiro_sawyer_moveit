@@ -312,11 +312,15 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
     ros::Rate loop_rate(250);
     ros::Time start = ros::Time::now();
     int size = traj.joint_trajectory.points.size();
-    for (int p = 0; ros::ok() && p < size; p++)
+    for (int p = 1; ros::ok() && p < size; p++)
     {
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
         while (ros::ok() && !reached(target))
         {
+            if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
+            {
+                break;
+            }
             double denominator = std::max(norm(target, applied_pos), 0.1);
             for(int i = 0; i < joint_num; i++)
             {
