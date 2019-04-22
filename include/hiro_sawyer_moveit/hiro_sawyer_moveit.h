@@ -49,10 +49,13 @@ private:
     std::vector<double> cur_vel;
     std::vector<double> Kp;
     std::vector<double> Kd;
+    std::vector<double> Ki; // added integrator
+    std::vector<double> i_error; // added integrator
     std::vector<double> effort_limit;
     std::vector<double> effort_limit_lower;
     std::vector<double> position_upper;
     std::vector<double> position_lower;
+
 
     std::vector<double> tau_pred;
     std::vector<double> q_prev;
@@ -86,6 +89,7 @@ private:
     bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
     void updateKDLVectors(std::vector<double>& pos, std::vector<double>& vel);
     double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.001, double delta_tau = 0.05, double kappa_tau = 0.1, double delta_q = 0.05, double kappa_q = 1);
+    double integratorBound(double value, double lowerBound, double upperBound);  // integrator
     // callbacks
     void targetCb(const geometry_msgs::Pose& msg);
     void gripperInitCb(const intera_core_msgs::IONodeStatus& msg);
