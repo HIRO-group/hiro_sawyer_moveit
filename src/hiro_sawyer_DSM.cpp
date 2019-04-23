@@ -15,7 +15,7 @@ int main(int argc, char** argv)
     init_pose.position.y = 0.45;
     init_pose.position.z = 0.3;
     sawyer.gotoPose(init_pose);
-    
+
     ros::waitForShutdown();
 
     return 0;

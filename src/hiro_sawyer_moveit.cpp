@@ -21,8 +21,31 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     effort_limit_lower = vector<double> {-80.0, -80.0, -40.0, -40.0, -9.0, -9.0, -9.0};
     position_lower = vector<double> {-3.0503, -3.8095, -3.0426, -3.0439, -2.9761, -2.9761, -4.7124};
     position_upper = vector<double> {3.0503, 2.2736, 3.0426, 3.0439, 2.9761, 2.9761, 4.7124};
+
+    // TEST 1
     Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
     Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
+    Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
+
+    i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
+
+    // // TEST 2
+    // Kp = vector<double> {160, 160, 76, 80, 17, 18, 16};
+    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
+
+    // // TEST 3
+    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
+    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
+
+    // // TEST 4
+    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
+    // Kd = vector<double> {30, 30, 4.5, 7.5, 4, 2, 1.5};
+
+    // // TEST 5
+    // Kp = vector<double> {60, 60, 28, 30, 6.25, 6.75, 6};
+    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
+
+    //Kd = vector<double> {40, 40, 6, 10, 5, 3, 2};
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
@@ -262,19 +285,34 @@ double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sa
             }
         }
     }
-    double _tau_max_diff = (1 - delta_tau)*effort_limit[0] - tau_max[0];
-    double _tau_min_diff = tau_min[0] - (1 - delta_tau)*effort_limit_lower[0];
+    // // TRAJECTORY-BASED TORQUE
+    // double _tau_max_diff = (1 - delta_tau)*effort_limit[0] - tau_max[0];
+    // double _tau_min_diff = tau_min[0] - (1 - delta_tau)*effort_limit_lower[0];
+
+    // // INVARIANT-SET TORQUE
+    double _tau_max_diff = (1 - delta_tau)*effort_limit[0] - tau[0];
+    double _tau_min_diff = tau[0] - (1 - delta_tau)*effort_limit_lower[0];
+    // std::cout << "torques in Delta function : " ;
+    // for (int i=0; i<joint_num;i++)
+    // {
+    //     std::cout << tau[i] << " " ;
+    // }
+    // std::cout << std::endl;
+
+    // // TRAJECTORY-BASED JOINT ANGLES
     double _q_max_diff = (1 - delta_q)*position_upper[0] - q_max[0];
     double _q_min_diff = q_min[0] - (1 - delta_q)*position_lower[0];
     double tmp_diff = 0;
     for (int i = 1; ros::ok() && i < joint_num; i++)
     {
-        tmp_diff = (1 - delta_tau)*effort_limit[i] - tau_max[i];
+        // tmp_diff = (1 - delta_tau)*effort_limit[i] - tau_max[i];
+        tmp_diff = (1 - delta_tau)*effort_limit[i] - tau[i];
         if (tmp_diff < _tau_max_diff)
         {
             _tau_max_diff = tmp_diff;
         }
-        tmp_diff = tau_min[i] - (1 - delta_tau)*effort_limit_lower[i];
+        // tmp_diff = tau_min[i] - (1 - delta_tau)*effort_limit_lower[i];
+        tmp_diff = tau[i] - (1 - delta_tau)*effort_limit_lower[i];
         if (tmp_diff < _tau_min_diff)
         {
             _tau_min_diff = tmp_diff;
@@ -292,8 +330,29 @@ double HiroSawyer::computeDelta(std::vector<double>& t, int sim_times, double sa
     }
     double _delta_tau = std::min(_tau_max_diff, _tau_min_diff);
     double _delta_q = std::min(_q_max_diff, _q_min_diff);
-    // ROS_INFO("_delta_tau: %lf, _delta_q: %lf", _delta_tau, _delta_q);
+    //ROS_INFO("_delta_tau: %lf, _delta_q: %lf", _delta_tau, _delta_q);
+
+    // std::cout << "Delta_q : " << kappa_q*_delta_q << std::endl;
+    // std::cout << "Delta_tau : " << kappa_tau*_delta_tau << std::endl << std::endl;
+
     return std::max(0.0, std::min(kappa_tau*_delta_tau, kappa_q*_delta_q));
+}
+
+
+double HiroSawyer::integratorBound(double value, double lowerBound, double upperBound)
+{
+    if(value<lowerBound)
+    {
+        return lowerBound;
+    }
+    else if(value>upperBound)
+    {
+        return upperBound;
+    }
+    else
+    {
+        return value;
+    }
 }
 
 void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
@@ -303,7 +362,29 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         ROS_ERROR("Invalid trajectory");
         return;
     }
-    
+
+    // *** PRINT NORMS RRT POINTS ***
+    // for (int p = 1; ros::ok() && p < traj.joint_trajectory.points.size(); p++)
+    // {
+    //    std::cout << "trajectory p = " << p << " : ";
+    //    for (int i=0; i<traj.joint_trajectory.points[p].positions.size(); i++ )
+    //    {
+    //         std::cout << traj.joint_trajectory.points[p].positions[i] << " ";
+    //    }
+    //    std::cout << std::endl;
+    //    if (p==1)
+    //    {
+    //         std::cout << "norm ||(p) - (p-1) || = " << norm(traj.joint_trajectory.points[p].positions, cur_pos) << std::endl;
+    //    }
+    //    else
+    //    {
+    //         std::cout << "norm ||(p) - (p-1) || = " << norm(traj.joint_trajectory.points[p].positions, traj.joint_trajectory.points[p-1].positions) << std::endl;
+
+    //    }
+    //    std::cout << std::endl;
+    // }
+    // std::cout << std::endl;
+
     // init applied pos
     for (int i = 0; i < joint_num; i++)
     {
@@ -312,6 +393,17 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
     ros::Rate loop_rate(250);
     ros::Time start = ros::Time::now();
     int size = traj.joint_trajectory.points.size();
+
+    //  *** PRINT LAST POINT OF TRAJECTORY ***
+    std::cout << "p = " << size << " , traj = ";
+    for (int i=0; i<traj.joint_trajectory.points[1].positions.size(); i++ )
+    {
+        std::cout << "(i = " << i << ") : ";
+        std::cout << traj.joint_trajectory.points[size-1].positions[i] << " , ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+
     for (int p = 1; ros::ok() && p < size; p++)
     {
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
@@ -322,12 +414,24 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
                 break;
             }
             double denominator = std::max(norm(target, applied_pos), 0.1);
+
             for(int i = 0; i < joint_num; i++)
             {
                 rho[i] = (target[i] - applied_pos[i])/denominator;
+
+                i_error[i] = i_error[i] + (applied_pos[i] - cur_pos[i]) *(ros::Time::now() - start).toSec();
+                i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i],0.1*effort_limit[i]);
+
+                std::cout << "error_integrator : " << i_error[i] << std::endl;
                 applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 500)*rho[i]*(ros::Time::now() - start).toSec();
-                tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i];
+                //tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i];
+                tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i] + Ki[i]*i_error[i];
+                std::cout << "applied_pos : " << applied_pos[i] << " ,  ";
+                std::cout << "current_pos : " << cur_pos[i] << " ,  ";
+                std::cout << "error_pos : " << applied_pos[i] - cur_pos[i] << std::endl;
             }
+            std::cout << std::endl;
+
             intera_core_msgs::JointCommand msg;
             msg.mode = 3; // TORQUE_MODE
             for (int i = 0; i < joint_num; i++)
@@ -342,8 +446,41 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
                 {
                     msg.effort.push_back(tau[i]);
                 }
-                // std::cout << msg.names[i] << ": " << msg.effort[i] << std::endl;
+                //std::cout << msg.names[i] << ": " << msg.effort[i] << std::endl;
             }
+            for (int i =0; i< joint_num; i++)
+            {
+                if (i==0)
+                {
+                    std::cout << "for p = " << p << std::endl;
+                    std::cout << "norm ||(p) - (p-1) || = " << norm(traj.joint_trajectory.points[p].positions, traj.joint_trajectory.points[p-1].positions) << std::endl;
+
+
+
+                    std::cout << "Delta: " << computeDelta(applied_pos, 500) << std::endl;
+                    // if (p==1)
+                    // {
+                    //     std::cout << "norm ||(p) - (p-1) || = " << norm(traj.joint_trajectory.points[p].positions, cur_pos) << std::endl;
+                    // }
+                    // else
+                    // {
+                    //     std::cout << "norm ||(p) - (p-1) || = " << norm(traj.joint_trajectory.points[p].positions, traj.joint_trajectory.points[p-1].positions) << std::endl;
+                    // }
+                    std::cout << msg.names[i] << ": " << msg.effort[i] << " , ";
+
+                }
+                else if (i == joint_num-1)
+                {
+                    std::cout << msg.names[i] << ": " << msg.effort[i] << std::endl;
+                }
+                else
+                {
+                    std::cout << msg.names[i] << ": " << msg.effort[i] << " , ";
+                }
+
+            }
+            std::cout << std::endl;
+
             pub_torque_cmd.publish(msg);
             start = ros::Time::now();
             // loop_rate.sleep();
@@ -368,7 +505,7 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
     move(my_plan.trajectory_);
-    
+
     // test gripper
     // close(true, 2);
     // open(true, 2);
