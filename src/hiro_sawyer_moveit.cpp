@@ -22,33 +22,10 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     position_lower = vector<double> {-3.0503, -3.8095, -3.0426, -3.0439, -2.9761, -2.9761, -4.7124};
     position_upper = vector<double> {3.0503, 2.2736, 3.0426, 3.0439, 2.9761, 2.9761, 4.7124};
 
-    // TEST 1
-    //Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
-    Kp = vector<double> {80/2, 80/2, 38/2, 40/2, 8.5/2, 9/2, 8/2};
+    Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
     Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-    //Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
-    Ki = vector<double> {2*2, 2*2, 1*2, 1*2, 0.5*2, 0.5*2, 0.5*2};
-    //Ki = vector<double> {0, 0, 0, 0, 0, 0, 0};
-
+    Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
     i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
-
-    // // TEST 2
-    // Kp = vector<double> {160, 160, 76, 80, 17, 18, 16};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    // // TEST 3
-    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    // // TEST 4
-    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
-    // Kd = vector<double> {30, 30, 4.5, 7.5, 4, 2, 1.5};
-
-    // // TEST 5
-    // Kp = vector<double> {60, 60, 28, 30, 6.25, 6.75, 6};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    //Kd = vector<double> {40, 40, 6, 10, 5, 3, 2};
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
@@ -346,11 +323,11 @@ double HiroSawyer::integratorBound(double value, double lowerBound, double upper
 {
     if(value<lowerBound)
     {
-        return lowerBound;
+        return 0; // reset instead of lowerBound;
     }
     else if(value>upperBound)
     {
-        return upperBound;
+        return 0; // reset instead of upperBound;
     }
     else
     {
@@ -495,6 +472,59 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
     }
 }
 
+void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
+{
+    if (traj.joint_trajectory.points.size() <= 0)
+    {
+        ROS_ERROR("Invalid trajectory");
+        return;
+    }
+
+    ros::Rate loop_rate(800);
+    ros::Time start = ros::Time::now();
+    int size = traj.joint_trajectory.points.size();
+
+    for (int p = 1; ros::ok() && p < size; p++)
+    {
+        std::vector<double> target = traj.joint_trajectory.points[p].positions;
+        std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities; //CHECK THIS!!!!
+        while (ros::ok() && !reached(target))
+        {
+            if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
+            {
+                break;
+            }
+
+            for(int i = 0; i < joint_num; i++)
+            {
+                i_error[i] = i_error[i] + beta*Ki[i]*(applied_pos[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
+                // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
+                i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i],0.05*effort_limit[i]);
+                tau[i] = beta*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (beta*target_vel[i]-cur_vel[i]) + i_error[i];
+            }
+
+            intera_core_msgs::JointCommand msg;
+            msg.mode = 3; // TORQUE_MODE
+            for (int i = 0; i < joint_num; i++)
+            {
+                msg.names.push_back("right_j" + std::to_string(i));
+                if (std::abs(tau[i]) >= 0.9*effort_limit[i])
+                {
+                    double sign = tau[i] < 0.0 ? -1.0 : 1.0;
+                    msg.effort.push_back(0.9 * effort_limit[i] * sign);
+                }
+                else
+                {
+                    msg.effort.push_back(tau[i]);
+                }
+            }
+            pub_torque_cmd.publish(msg);
+            start = ros::Time::now();
+            // loop_rate.sleep();
+        }
+    }
+}
+
 void HiroSawyer::gotoPose(geometry_msgs::Pose& target)
 {
     move_group.setPoseTarget(target);
@@ -511,7 +541,7 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
-    move(my_plan.trajectory_); // move function to use for ERG
+    //move(my_plan.trajectory_); // move function to use for ERG
     moveee(my_plan.trajectory_); // move function to use for interruption detection
 
 
