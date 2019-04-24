@@ -88,15 +88,33 @@ int main(int argc, char **argv)
     sub_state = n.subscribe("/robot/joint_states",500,stateCallback);
     ros::spinOnce();
 
+    // // TEST 1
+    // // Control parameters
+    // Kp[0]=80; //10;//150;//500;
+    // Kp[1]=80; //10;//400;
+    // Kp[2]=38; //10;//250;
+    // Kp[3]=40; //10;//300;
+    // Kp[4]=8.5; //5;//300;
+    // Kp[5]=9; //5;//100;
+    // Kp[6]=8;
 
+    // Kd[0]=20; //1;//25
+    // Kd[1]=20; //1;//30;
+    // Kd[2]=3; //1;//30;
+    // Kd[3]=5; //1;//50;
+    // Kd[4]=2.5; //0.5;//8;
+    // Kd[5]=1.5; //0.5;//5;
+    // Kd[6]=1; //0.5;//4
+
+    // TEST 2
     // Control parameters
-    Kp[0]=80; //10;//150;//500;
-    Kp[1]=80; //10;//400;
-    Kp[2]=38; //10;//250;
-    Kp[3]=40; //10;//300;
-    Kp[4]=8.5; //5;//300;
-    Kp[5]=9; //5;//100;
-    Kp[6]=8;
+    Kp[0]=80/2; //10;//150;//500;
+    Kp[1]=80/2; //10;//400;
+    Kp[2]=38/2; //10;//250;
+    Kp[3]=40/2; //10;//300;
+    Kp[4]=8.5/2; //5;//300;
+    Kp[5]=9/2; //5;//100;
+    Kp[6]=8/2;
 
     Kd[0]=20; //1;//25
     Kd[1]=20; //1;//30;
@@ -168,17 +186,17 @@ int main(int argc, char **argv)
             for(int i=0; i<7; i++)
             {
                 tau[i] = Kp[i]*(q_d[i] - q[i]) - Kd[i]*dotq[i]; // it seems that gravity compensation is already inherently implemented in Sawyer torque control mode
-                // if(tau[i]>0.9*tau_limit[i])
-                // {
-                //     tau[i] = 0.9*tau_limit[i];
-                // }
-                // else if (tau[i]<-0.9*tau_limit[i])
-                // {
-                //     tau[i]=-0.9*tau_limit[i];
-                // }
+                if(tau[i]>0.9*tau_limit[i])
+                {
+                    tau[i] = 0.9*tau_limit[i];
+                }
+                else if (tau[i]<-0.9*tau_limit[i])
+                {
+                    tau[i]=-0.9*tau_limit[i];
+                }
             }
-            std::cout << "tau2: " + std::to_string(tau[2])  << std::endl
-                      << "error2: " + std::to_string(q_d[2] - q[2])  << std::endl << std::endl;
+            // std::cout << "tau2: " + std::to_string(tau[2])  << std::endl
+            //           << "error2: " + std::to_string(q_d[2] - q[2])  << std::endl << std::endl;
 
 
             intera_core_msgs::JointCommand msg;

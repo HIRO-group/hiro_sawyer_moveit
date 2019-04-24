@@ -23,9 +23,12 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     position_upper = vector<double> {3.0503, 2.2736, 3.0426, 3.0439, 2.9761, 2.9761, 4.7124};
 
     // TEST 1
-    Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
+    //Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
+    Kp = vector<double> {80/2, 80/2, 38/2, 40/2, 8.5/2, 9/2, 8/2};
     Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-    Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
+    //Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
+    Ki = vector<double> {2*2, 2*2, 1*2, 1*2, 0.5*2, 0.5*2, 0.5*2};
+    //Ki = vector<double> {0, 0, 0, 0, 0, 0, 0};
 
     i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
 
@@ -390,7 +393,8 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
     {
         applied_pos[i] = cur_pos[i];
     }
-    ros::Rate loop_rate(250);
+    //ros::Rate loop_rate(250);
+    ros::Rate loop_rate(800);
     ros::Time start = ros::Time::now();
     int size = traj.joint_trajectory.points.size();
 
@@ -419,13 +423,16 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
             {
                 rho[i] = (target[i] - applied_pos[i])/denominator;
 
-                i_error[i] = i_error[i] + (applied_pos[i] - cur_pos[i]) *(ros::Time::now() - start).toSec();
+                i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i]) *(ros::Time::now() - start).toSec();
                 i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i],0.1*effort_limit[i]);
 
                 std::cout << "error_integrator : " << i_error[i] << std::endl;
                 applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 500)*rho[i]*(ros::Time::now() - start).toSec();
                 //tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i];
-                tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i] + Ki[i]*i_error[i];
+
+                applied_pos[i] = target[i];
+
+                tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i] + i_error[i];
                 std::cout << "applied_pos : " << applied_pos[i] << " ,  ";
                 std::cout << "current_pos : " << cur_pos[i] << " ,  ";
                 std::cout << "error_pos : " << applied_pos[i] - cur_pos[i] << std::endl;
@@ -504,7 +511,9 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
-    move(my_plan.trajectory_);
+    move(my_plan.trajectory_); // move function to use for ERG
+    moveee(my_plan.trajectory_); // move function to use for interruption detection
+
 
     // test gripper
     // close(true, 2);
