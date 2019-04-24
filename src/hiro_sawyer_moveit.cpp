@@ -22,33 +22,10 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     position_lower = vector<double> {-3.0503, -3.8095, -3.0426, -3.0439, -2.9761, -2.9761, -4.7124};
     position_upper = vector<double> {3.0503, 2.2736, 3.0426, 3.0439, 2.9761, 2.9761, 4.7124};
 
-    // TEST 1
-    //Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
-    Kp = vector<double> {80/2, 80/2, 38/2, 40/2, 8.5/2, 9/2, 8/2};
+    Kp = vector<double> {80, 80, 38, 40, 8.5, 9, 8};
     Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-    //Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
-    Ki = vector<double> {2*2, 2*2, 1*2, 1*2, 0.5*2, 0.5*2, 0.5*2};
-    //Ki = vector<double> {0, 0, 0, 0, 0, 0, 0};
-
+    Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
     i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
-
-    // // TEST 2
-    // Kp = vector<double> {160, 160, 76, 80, 17, 18, 16};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    // // TEST 3
-    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    // // TEST 4
-    // Kp = vector<double> {240, 240, 114, 120, 25.5, 27, 24};
-    // Kd = vector<double> {30, 30, 4.5, 7.5, 4, 2, 1.5};
-
-    // // TEST 5
-    // Kp = vector<double> {60, 60, 28, 30, 6.25, 6.75, 6};
-    // Kd = vector<double> {20, 20, 3, 5, 2.5, 1.5, 1};
-
-    //Kd = vector<double> {40, 40, 6, 10, 5, 3, 2};
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
@@ -346,11 +323,11 @@ double HiroSawyer::integratorBound(double value, double lowerBound, double upper
 {
     if(value<lowerBound)
     {
-        return lowerBound;
+        return 0; // reset instead of lowerBound;
     }
     else if(value>upperBound)
     {
-        return upperBound;
+        return 0; // reset instead of upperBound;
     }
     else
     {
