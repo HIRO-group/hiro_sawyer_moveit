@@ -495,6 +495,58 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
     }
 }
 
+void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
+{
+    if (traj.joint_trajectory.points.size() <= 0)
+    {
+        ROS_ERROR("Invalid trajectory");
+        return;
+    }
+
+    ros::Rate loop_rate(800);
+    ros::Time start = ros::Time::now();
+    int size = traj.joint_trajectory.points.size();
+
+    for (int p = 1; ros::ok() && p < size; p++)
+    {
+        std::vector<double> target = traj.joint_trajectory.points[p].positions;
+        std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities; //CHECK THIS!!!!
+        while (ros::ok() && !reached(target))
+        {
+            if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
+            {
+                break;
+            }
+
+            for(int i = 0; i < joint_num; i++)
+            {
+                i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
+                i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i],0.05*effort_limit[i]);
+                tau[i] = Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (target_vel[i]-cur_vel[i]) + i_error[i];
+            }
+
+            intera_core_msgs::JointCommand msg;
+            msg.mode = 3; // TORQUE_MODE
+            for (int i = 0; i < joint_num; i++)
+            {
+                msg.names.push_back("right_j" + std::to_string(i));
+                if (std::abs(tau[i]) >= 0.9*effort_limit[i])
+                {
+                    double sign = tau[i] < 0.0 ? -1.0 : 1.0;
+                    msg.effort.push_back(0.9 * effort_limit[i] * sign);
+                }
+                else
+                {
+                    msg.effort.push_back(tau[i]);
+                }
+            }
+            pub_torque_cmd.publish(msg);
+            //start = ros::Time::now();
+            // loop_rate.sleep();
+        }
+    }
+}
+
 void HiroSawyer::gotoPose(geometry_msgs::Pose& target)
 {
     move_group.setPoseTarget(target);
@@ -511,7 +563,7 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
-    move(my_plan.trajectory_); // move function to use for ERG
+    //move(my_plan.trajectory_); // move function to use for ERG
     moveee(my_plan.trajectory_); // move function to use for interruption detection
 
 

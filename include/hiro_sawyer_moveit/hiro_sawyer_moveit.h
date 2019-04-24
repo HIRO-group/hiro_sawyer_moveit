@@ -104,5 +104,6 @@ public:
     bool stop(bool _block, double _timeout);
     // movement
     void move(moveit_msgs::RobotTrajectory& traj);
+    void moveee(moveit_msgs::RobotTrajectory& traj); // move function used for interruption detection
     void gotoPose(geometry_msgs::Pose& target);
 };
