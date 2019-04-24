@@ -56,6 +56,7 @@ private:
     std::vector<double> position_upper;
     std::vector<double> position_lower;
 
+    double beta; // interruption factor
 
     std::vector<double> tau_pred;
     std::vector<double> q_prev;
@@ -104,5 +105,6 @@ public:
     bool stop(bool _block, double _timeout);
     // movement
     void move(moveit_msgs::RobotTrajectory& traj);
+    void moveee(moveit_msgs::RobotTrajectory& traj); // move function used for interruption detection
     void gotoPose(geometry_msgs::Pose& target);
 };
