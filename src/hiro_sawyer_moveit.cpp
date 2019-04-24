@@ -497,10 +497,10 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
 
             for(int i = 0; i < joint_num; i++)
             {
-                i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
+                i_error[i] = i_error[i] + beta*Ki[i]*(applied_pos[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
                 // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
                 i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i],0.05*effort_limit[i]);
-                tau[i] = Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (target_vel[i]-cur_vel[i]) + i_error[i];
+                tau[i] = beta*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (beta*target_vel[i]-cur_vel[i]) + i_error[i];
             }
 
             intera_core_msgs::JointCommand msg;

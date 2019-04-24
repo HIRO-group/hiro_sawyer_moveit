@@ -56,6 +56,7 @@ private:
     std::vector<double> position_upper;
     std::vector<double> position_lower;
 
+    double beta; // interruption factor
 
     std::vector<double> tau_pred;
     std::vector<double> q_prev;
