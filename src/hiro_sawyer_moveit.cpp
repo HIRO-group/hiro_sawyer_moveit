@@ -69,8 +69,8 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     spinner.start();
 
     move_group.setPlannerId("RRTConnect");
-    move_group.setNumPlanningAttempts(8);
-    move_group.setPlanningTime(7);
+    move_group.setNumPlanningAttempts(10);
+    move_group.setPlanningTime(10);
 
     ROS_INFO("Reference frame: %s", move_group.getPlanningFrame().c_str());
     ROS_INFO("End effector link: %s", move_group.getEndEffectorLink().c_str());
