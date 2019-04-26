@@ -523,7 +523,7 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
             }
             pub_torque_cmd.publish(msg);
             start = ros::Time::now();
-            // loop_rate.sleep();
+            loop_rate.sleep();
         }
     }
 }
