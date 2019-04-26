@@ -27,6 +27,13 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
     i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
 
+    // // tuning
+    // for (int i=0; i<Kp.size(); i++)
+    // {
+    //     Kp[i]=Kp[i]/2;
+    //     Ki[i]=Ki[i]*2;
+    // }
+
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
     string robot_desc_string;
@@ -377,7 +384,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
 
     //  *** PRINT LAST POINT OF TRAJECTORY ***
     std::cout << "p = " << size << " , traj = ";
-    for (int i=0; i<traj.joint_trajectory.points[1].positions.size(); i++ )
+    for (int i=0; i<traj.joint_trajectory.points[size-1].positions.size(); i++ )
     {
         std::cout << "(i = " << i << ") : ";
         std::cout << traj.joint_trajectory.points[size-1].positions[i] << " , ";
@@ -401,6 +408,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
                 rho[i] = (target[i] - applied_pos[i])/denominator;
 
                 i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i]) *(ros::Time::now() - start).toSec();
+                std::cout << "sampling time " << (ros::Time::now() - start).toSec() << std::endl;
                 i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i],0.1*effort_limit[i]);
 
                 std::cout << "error_integrator : " << i_error[i] << std::endl;
@@ -487,17 +495,12 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
     for (int p = 1; ros::ok() && p < size; p++)
     {
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
-        std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities; //CHECK THIS!!!!
+        std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities;
         while (ros::ok() && !reached(target))
         {
-            if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
-            {
-                break;
-            }
-
             for(int i = 0; i < joint_num; i++)
             {
-                i_error[i] = i_error[i] + beta*Ki[i]*(applied_pos[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
+                i_error[i] = i_error[i] + beta*Ki[i]*(target[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
                 // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
                 i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i],0.05*effort_limit[i]);
                 tau[i] = beta*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (beta*target_vel[i]-cur_vel[i]) + i_error[i];
@@ -541,8 +544,8 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
-    //move(my_plan.trajectory_); // move function to use for ERG
-    moveee(my_plan.trajectory_); // move function to use for interruption detection
+    move(my_plan.trajectory_); // move function to use for ERG
+    //moveee(my_plan.trajectory_); // move function to use for interruption detection
 
 
     // test gripper
