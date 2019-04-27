@@ -9,11 +9,12 @@ using namespace intera_core_msgs;
 using namespace std;
 using namespace KDL;
 
-HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNING_GROUP(group), ee_name(""), move_group(group)
+HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNING_GROUP(group), ee_name(""), move_group(group), easement_factor(1)
 {
     sub_move_target = n.subscribe("/hiro/sawyer/target", 1, &HiroSawyer::targetCb, this);
     sub_end_effector_state = n.subscribe("/io/end_effector/state", 3, &HiroSawyer::gripperInitCb, this);
     sub_joints_state = n.subscribe("/robot/joint_states", 1, &HiroSawyer::stateCb, this);
+    sub_easement = n.subscribe("/hiro/final_easement", 1, &HiroSawyer::easementCb, this);
     pub_end_effector_cmd = n.advertise<IOComponentCommand>("/io/end_effector/command", 10);
     pub_torque_cmd = n.advertise<JointCommand>("/robot/limb/right/joint_command", 1);
 
@@ -175,6 +176,22 @@ void HiroSawyer::stateCb(const sensor_msgs::JointState& msg)
     {
         cur_pos[i] = msg.position[i+1];   // i=0: state head_pan
         cur_vel[i] = msg.velocity[i+1];   // i=0: state head_pan
+    }
+}
+
+void HiroSawyer::easementCb(const std_msgs::Float64::ConstPtr& msg)
+{
+    if (msg->data > 1.0)
+    {
+        easement_factor = 1.0;
+    }
+    else if (msg->data < 0.0)
+    {
+        easement_factor = 0.0;
+    }
+    else
+    {
+        easement_factor = msg->data;
     }
 }
 
@@ -494,7 +511,7 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
     ros::Time start = ros::Time::now();
     int size = traj.joint_trajectory.points.size();
 
-    for (int p = 1; ros::ok() && p < size; p++)
+    for (int p = 0; ros::ok() && p < size; p++)
     {
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
         std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities;
@@ -502,10 +519,10 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
         {
             for(int i = 0; i < joint_num; i++)
             {
-                i_error[i] = i_error[i] + beta*Ki[i]*(target[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
+                i_error[i] = i_error[i] + easement_factor*Ki[i]*(target[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
                 // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
-                i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i],0.05*effort_limit[i]);
-                tau[i] = beta*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (beta*target_vel[i]-cur_vel[i]) + i_error[i];
+                i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i], 0.05*effort_limit[i]);
+                tau[i] = easement_factor*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (easement_factor*target_vel[i]-cur_vel[i]) + i_error[i];
             }
 
             intera_core_msgs::JointCommand msg;
