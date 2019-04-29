@@ -3,7 +3,11 @@
 
   <node name="joint_trajectory_action_server" pkg="intera_interface" type="joint_trajectory_action_server.py" output="screen" />
 
-  <include file="$(find hiro_sawyer_moveit)/launch/planning_context.launch" />
+  <arg name="use_realsense" default="false"/>
+
+  <include file="$(find hiro_sawyer_moveit)/launch/planning_context.launch">
+    <arg name="realsense" value="$(arg use_realsense)"/>
+  </include>
 
   <!-- GDB Debug Option -->
   <arg name="debug" default="false" />
