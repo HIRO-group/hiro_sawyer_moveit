@@ -89,8 +89,9 @@ private:
     bool wait(ros::Duration _timeout);
     bool sendGripperCommand(std::string _cmd, bool _block, double _timeout, std::string _args);
     void updateKDLVectors(std::vector<double>& pos, std::vector<double>& vel);
-    double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.001, double delta_tau = 0.05, double kappa_tau = 0.1, double delta_q = 0.05, double kappa_q = 1);
-    double integratorBound(double value, double lowerBound, double upperBound);  // integrator
+    double computeDelta(std::vector<double>& t, int sim_times, double sampling_time = 0.001, double delta_tau = 0.05, double kappa_tau = 1, double delta_q = 0.05, double kappa_q = 10);
+    double integratorBound(double value, double lowerBound, double upperBound);  // integrator bound
+    double integratorReset(double value, double lowerBound, double upperBound);  // integrator reset
     // callbacks
     void targetCb(const geometry_msgs::Pose& msg);
     void gripperInitCb(const intera_core_msgs::IONodeStatus& msg);

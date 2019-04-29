@@ -30,8 +30,9 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     // // tuning
     // for (int i=0; i<Kp.size(); i++)
     // {
-    //     Kp[i]=Kp[i]/2;
-    //     Ki[i]=Ki[i]*2;
+    //     Kp[i]=Kp[i]*5;
+    //     Kd[i]=Kd[i]*5;
+    //     Ki[i]=Ki[i]*5;
     // }
 
     // create KDL chain
@@ -330,17 +331,38 @@ double HiroSawyer::integratorBound(double value, double lowerBound, double upper
 {
     if(value<lowerBound)
     {
-        return 0; // reset instead of lowerBound;
+        return lowerBound;
     }
     else if(value>upperBound)
     {
-        return 0; // reset instead of upperBound;
+        return upperBound;
     }
     else
     {
         return value;
     }
 }
+
+
+double HiroSawyer::integratorReset(double value, double lowerBound, double upperBound)
+{
+    if(value<lowerBound)
+    {
+        std::cout << "if lower than lowerBound" << std::endl;
+        return 0; // reset
+    }
+    else if(value>upperBound)
+    {
+        std::cout << "if larger than upperBound" << std::endl;
+        return 0; // reset
+    }
+    else
+    {
+        std::cout << "lowerBound < value < upperBound" << std::endl;
+        return value;
+    }
+}
+
 
 void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
 {
@@ -397,25 +419,57 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
         std::vector<double> target = traj.joint_trajectory.points[p].positions;
         while (ros::ok() && !reached(target))
         {
-            if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
+            // // switching condition 1
+            // if (norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) <= 0.5)
+            // {
+            //     break;
+            // }
+
+            // switching condition 2
+            for (int i = 0; i < joint_num; i++)
+            {
+                std::cout << "i: " << i << " , ";
+                std::cout << "applied position " << applied_pos[i] << " , ";
+                std::cout << "target " << target[i] << " , ";
+                std::cout << "target_prev " << traj.joint_trajectory.points[p - 1].positions[i] << std::endl;
+            }
+
+            std::cout << "switching condition 1: " << norm(target, cur_pos)/norm(target, traj.joint_trajectory.points[p - 1].positions) << std::endl;
+            std::cout << "switching condition 1 (norm 1): " << norm(target, cur_pos) << std::endl;
+            std::cout << "switching condition 1 (norm 2): " << norm(target, traj.joint_trajectory.points[p - 1].positions) << std::endl;
+            std::cout << "switching condition 2: " << norm(applied_pos, traj.joint_trajectory.points[p - 1].positions)/norm(target, traj.joint_trajectory.points[p - 1].positions) << std::endl;
+            std::cout << "switching condition 2 (norm 1): " << norm(applied_pos, traj.joint_trajectory.points[p - 1].positions) << std::endl;
+            std::cout << "switching condition 2 (norm 2): " << norm(target, traj.joint_trajectory.points[p - 1].positions) << std::endl;
+            std::cout << std::endl;
+
+
+            if (norm(applied_pos, traj.joint_trajectory.points[p - 1].positions)/norm(target, traj.joint_trajectory.points[p - 1].positions) > 1.0)
             {
                 break;
             }
+
             double denominator = std::max(norm(target, applied_pos), 0.1);
 
             for(int i = 0; i < joint_num; i++)
             {
                 rho[i] = (target[i] - applied_pos[i])/denominator;
-
-                i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i]) *(ros::Time::now() - start).toSec();
-                std::cout << "sampling time " << (ros::Time::now() - start).toSec() << std::endl;
-                i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i],0.1*effort_limit[i]);
-
-                std::cout << "error_integrator : " << i_error[i] << std::endl;
-                applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 500)*rho[i]*(ros::Time::now() - start).toSec();
+                applied_pos[i] = applied_pos[i] + computeDelta(applied_pos, 500)*rho[i]*(1.0/800);//(ros::Time::now() - start).toSec();
                 //tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i];
 
-                applied_pos[i] = target[i];
+                // // by-pass ERG
+                // applied_pos[i] = target[i];
+
+
+                std::cout << "Ki: " << Ki[i] << std::endl;
+                std::cout << "position error " << applied_pos[i] - cur_pos[i] << std::endl;
+                //std::cout << "1/800 " << (1/800) << std::endl;
+                //std::cout << "1.0/800 " << (1.0/800) << std::endl;
+                i_error[i] = i_error[i] + Ki[i]*(applied_pos[i] - cur_pos[i]) *(1.0/800);//(ros::Time::now() - start).toSec();
+
+                std::cout << "error_integrator VOOR RESET: " << i_error[i] << std::endl;
+                i_error[i] = integratorReset(i_error[i], 0.1*effort_limit_lower[i],0.1*effort_limit[i]);
+                std::cout << "error_integrator NA RESET: " << i_error[i] << std::endl;
+
 
                 tau[i] = Kp[i]*(applied_pos[i] - cur_pos[i]) - Kd[i] * cur_vel[i] + i_error[i];
                 std::cout << "applied_pos : " << applied_pos[i] << " ,  ";
@@ -475,7 +529,7 @@ void HiroSawyer::move(moveit_msgs::RobotTrajectory& traj)
 
             pub_torque_cmd.publish(msg);
             start = ros::Time::now();
-            // loop_rate.sleep();
+            loop_rate.sleep();
         }
     }
 }
