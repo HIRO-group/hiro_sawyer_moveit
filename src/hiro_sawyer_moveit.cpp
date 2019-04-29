@@ -15,8 +15,14 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     sub_end_effector_state = n.subscribe("/io/end_effector/state", 3, &HiroSawyer::gripperInitCb, this);
     sub_joints_state = n.subscribe("/robot/joint_states", 1, &HiroSawyer::stateCb, this);
     sub_easement = n.subscribe("/hiro/final_easement", 1, &HiroSawyer::easementCb, this);
+    sub_easement_test = n.subscribe("hiro/easement/test", 1, &HiroSawyer::easementTest, this);
     pub_end_effector_cmd = n.advertise<IOComponentCommand>("/io/end_effector/command", 10);
     pub_torque_cmd = n.advertise<JointCommand>("/robot/limb/right/joint_command", 1);
+    for (int i = 0; i < 7; i++)
+    {
+        pub_target_debug[i] = n.advertise<std_msgs::Float64>("/hiro/joint/position/target" + std::to_string(i), 100);
+        pub_current_debug[i] = n.advertise<std_msgs::Float64>("/hiro/joint/position/current" + std::to_string(i), 100);
+    }
 
     effort_limit = vector<double> {80.0, 80.0, 40.0, 40.0, 9.0, 9.0, 9.0};
     effort_limit_lower = vector<double> {-80.0, -80.0, -40.0, -40.0, -9.0, -9.0, -9.0};
@@ -28,13 +34,13 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     Ki = vector<double> {2, 2, 1, 1, 0.5, 0.5, 0.5};
     i_error = vector<double> {0, 0, 0, 0, 0, 0, 0};
 
-    // // tuning
-    // for (int i=0; i<Kp.size(); i++)
-    // {
-    //     Kp[i]=Kp[i]*5;
-    //     Kd[i]=Kd[i]*5;
-    //     Ki[i]=Ki[i]*5;
-    // }
+    // tuning
+    for (int i=0; i<Kp.size(); i++)
+    {
+        Kp[i]=Kp[i]*0.9;
+        // Kd[i]=Kd[i]*5;
+        Ki[i]=Ki[i]*10;
+    }
 
     // create KDL chain
     string path = ros::package::getPath("hiro_sawyer_moveit");
@@ -71,7 +77,7 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     spinner.start();
 
     move_group.setPlannerId("RRTConnect");
-    move_group.setNumPlanningAttempts(10);
+    move_group.setNumPlanningAttempts(64);
     move_group.setPlanningTime(10);
 
     ROS_INFO("Reference frame: %s", move_group.getPlanningFrame().c_str());
@@ -193,6 +199,38 @@ void HiroSawyer::easementCb(const std_msgs::Float64::ConstPtr& msg)
     else
     {
         easement_factor = msg->data;
+    }
+}
+
+void HiroSawyer::easementTest(const std_msgs::Empty::ConstPtr& msg)
+{
+    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+    bool success = false;
+    for(int i = 0; i < 5; i++)
+    {
+        geometry_msgs::Pose _pose1;
+        _pose1.orientation.x = 0.0;
+        _pose1.orientation.y = 1.0;
+        _pose1.orientation.z = 0.0;
+        _pose1.orientation.w = 0.0;
+        _pose1.position.x = 0.45;
+        _pose1.position.y = 0.45;
+        _pose1.position.z = 0.3;
+        move_group.setPoseTarget(_pose1);
+        success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+        moveee(my_plan.trajectory_);
+
+        geometry_msgs::Pose _pose2;
+        _pose2.orientation.x = 0.0;
+        _pose2.orientation.y = 1.0;
+        _pose2.orientation.z = 0.0;
+        _pose2.orientation.w = 0.0;
+        _pose2.position.x = 0.45;
+        _pose2.position.y = 0.45;
+        _pose2.position.z = -0.3;
+        move_group.setPoseTarget(_pose2);
+        success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+        moveee(my_plan.trajectory_);
     }
 }
 
@@ -571,11 +609,19 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
         std::vector<double> target_vel = traj.joint_trajectory.points[p].velocities;
         while (ros::ok() && !reached(target))
         {
+            for (int i = 0; i < joint_num; i++)
+            {
+                std_msgs::Float64 dbg_msg;
+                dbg_msg.data = target[i];
+                pub_target_debug[i].publish(dbg_msg);
+                dbg_msg.data = cur_pos[i];
+                pub_current_debug[i].publish(dbg_msg);
+            }
             for(int i = 0; i < joint_num; i++)
             {
                 i_error[i] = i_error[i] + easement_factor*Ki[i]*(target[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
                 // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
-                i_error[i] = integratorBound(i_error[i], 0.05*effort_limit_lower[i], 0.05*effort_limit[i]);
+                i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i], 0.1*effort_limit[i]);
                 tau[i] = easement_factor*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (easement_factor*target_vel[i]-cur_vel[i]) + i_error[i];
             }
 

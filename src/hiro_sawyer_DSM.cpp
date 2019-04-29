@@ -4,7 +4,7 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "hiro_DSM");
     HiroSawyer sawyer("hiro_DSM", "right_arm");
-    ros::AsyncSpinner spinner(4);
+    ros::AsyncSpinner spinner(8);
 
     geometry_msgs::Pose init_pose;
     init_pose.orientation.x = 0.0;

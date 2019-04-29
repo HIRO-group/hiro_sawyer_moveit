@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 
 #include <std_msgs/Float64.h>
+#include <std_msgs/Empty.h>
 #include <sensor_msgs/JointState.h>
 
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -43,10 +44,13 @@ private:
     ros::Publisher pub_end_effector_cmd;
     ros::Publisher pub_cmd;
     ros::Publisher pub_torque_cmd;
+    ros::Publisher pub_target_debug[7];
+    ros::Publisher pub_current_debug[7];
     ros::Subscriber sub_end_effector_state;
     ros::Subscriber sub_joints_state;
     ros::Subscriber sub_move_target;
     ros::Subscriber sub_easement;
+    ros::Subscriber sub_easement_test;
 
     std::vector<double> cur_pos;
     std::vector<double> cur_vel;
@@ -98,6 +102,7 @@ private:
     void gripperInitCb(const intera_core_msgs::IONodeStatus& msg);
     void stateCb(const sensor_msgs::JointState& msg);
     void easementCb(const std_msgs::Float64::ConstPtr& msg);
+    void easementTest(const std_msgs::Empty::ConstPtr& msg);
 public:
     HiroSawyer(std::string name, std::string group = "right_arm");
     ~HiroSawyer();
