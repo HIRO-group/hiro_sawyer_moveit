@@ -37,9 +37,9 @@ HiroSawyer::HiroSawyer(string name, string group) : n(name), spinner(8), PLANNIN
     // tuning
     for (int i=0; i<Kp.size(); i++)
     {
-        Kp[i]=Kp[i]*0.9;
+        Kp[i]=Kp[i]*1.1;
         // Kd[i]=Kd[i]*5;
-        Ki[i]=Ki[i]*10;
+        Ki[i]=Ki[i]*4;
     }
 
     // create KDL chain
@@ -405,17 +405,17 @@ double HiroSawyer::integratorReset(double value, double lowerBound, double upper
 {
     if(value<lowerBound)
     {
-        std::cout << "if lower than lowerBound" << std::endl;
+        //std::cout << "if lower than lowerBound" << std::endl;
         return 0; // reset
     }
     else if(value>upperBound)
     {
-        std::cout << "if larger than upperBound" << std::endl;
+        //std::cout << "if larger than upperBound" << std::endl;
         return 0; // reset
     }
     else
     {
-        std::cout << "lowerBound < value < upperBound" << std::endl;
+        //std::cout << "lowerBound < value < upperBound" << std::endl;
         return value;
     }
 }
@@ -621,7 +621,7 @@ void HiroSawyer::moveee(moveit_msgs::RobotTrajectory& traj)
             {
                 i_error[i] = i_error[i] + easement_factor*Ki[i]*(target[i] - cur_pos[i])*(ros::Time::now() - start).toSec();
                 // better to use (1/loop_rate) instead of (ros::Time::now() - start).toSec()
-                i_error[i] = integratorBound(i_error[i], 0.1*effort_limit_lower[i], 0.1*effort_limit[i]);
+                i_error[i] = integratorReset(i_error[i], 0.05*effort_limit_lower[i], 0.05*effort_limit[i]);
                 tau[i] = easement_factor*Kp[i]*(target[i] - cur_pos[i]) + Kd[i] * (easement_factor*target_vel[i]-cur_vel[i]) + i_error[i];
             }
 
@@ -663,8 +663,8 @@ void HiroSawyer::targetCb(const geometry_msgs::Pose& msg)
     bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
     ROS_INFO("Visualizing plan 1 (pose goal) %s", success ? "" : "FAILED");
 
-    move(my_plan.trajectory_); // move function to use for ERG
-    //moveee(my_plan.trajectory_); // move function to use for interruption detection
+    //move(my_plan.trajectory_); // move function to use for ERG
+    moveee(my_plan.trajectory_); // move function to use for interruption detection
 
 
     // test gripper
